@@ -3,12 +3,14 @@
 #include <ctype.h>
 #include <string.h>
 
-// Token Types
+#define MAX_TOKEN_LEN 100
+#define MAX_EXPR_LEN 256
+
 typedef enum {
     TOKEN_NUMBER,
     TOKEN_PLUS,
     TOKEN_MINUS,
-    TOKEN_MULTIPLY,
+    TOKEN_TIMES,
     TOKEN_DIVIDE,
     TOKEN_LPAREN,
     TOKEN_RPAREN,
@@ -16,142 +18,148 @@ typedef enum {
     TOKEN_INVALID
 } TokenType;
 
-// Token Structure
 typedef struct {
     TokenType type;
-    int value; // Used only for numbers
+    int value; 
 } Token;
 
-// Global Variables
 char *input;
-Token currentToken;
+Token current_token;
+int pos = 0;
 
-// Function Prototypes
-void nextToken();
-int parseExpression();
-int parseTerm();
-int parseFactor();
-void error(const char *message);
 
-// Lexer: Fetch the next token
-void nextToken() {
-    while (isspace(*input)) input++; // Skip whitespaces
+void next_token();
+int parse_expression();
+int parse_term();
+int parse_factor();
+int evaluate_expression();
 
-    if (*input == '\0') {
-        currentToken.type = TOKEN_END;
-        return;
-    }
+void error(const char *msg) {
+    fprintf(stderr, "Error: %s\n", msg);
+    exit(EXIT_FAILURE);
+}
 
-    if (isdigit(*input)) {
-        currentToken.type = TOKEN_NUMBER;
-        currentToken.value = 0;
-        while (isdigit(*input)) {
-            currentToken.value = currentToken.value * 10 + (*input - '0');
-            input++;
+// Lexer function
+void next_token() {
+    while (isspace(input[pos])) pos++; // Skip whitespace
+
+    if (isdigit(input[pos])) {
+        current_token.type = TOKEN_NUMBER;
+        current_token.value = 0;
+        while (isdigit(input[pos])) {
+            current_token.value = current_token.value * 10 + (input[pos] - '0');
+            pos++;
+        }
+
+        
+        if (input[pos] == '(') {
+            current_token.type = TOKEN_TIMES; /
+            return; 
         }
         return;
     }
 
-    switch (*input) {
-        case '+': currentToken.type = TOKEN_PLUS; input++; break;
-        case '-': currentToken.type = TOKEN_MINUS; input++; break;
-        case '*': currentToken.type = TOKEN_MULTIPLY; input++; break;
-        case '/': currentToken.type = TOKEN_DIVIDE; input++; break;
-        case '(': currentToken.type = TOKEN_LPAREN; input++; break;
-        case ')': currentToken.type = TOKEN_RPAREN; input++; break;
+    switch (input[pos]) {
+        case '+':
+            current_token.type = TOKEN_PLUS;
+            pos++;
+            break;
+        case '-':
+            current_token.type = TOKEN_MINUS;
+            pos++;
+            break;
+        case '*':
+            current_token.type = TOKEN_TIMES;
+            pos++;
+            break;
+        case '/':
+            current_token.type = TOKEN_DIVIDE;
+            pos++;
+            break;
+        case '(':
+            current_token.type = TOKEN_LPAREN;
+            pos++;
+            break;
+        case ')':
+            current_token.type = TOKEN_RPAREN;
+            pos++;
+            break;
+        case '\0':
+            current_token.type = TOKEN_END;
+            break;
         default:
-            currentToken.type = TOKEN_INVALID;
-            input++;
+            current_token.type = TOKEN_INVALID;
             break;
     }
 }
 
-// Parser Error Handling
-void error(const char *message) {
-    fprintf(stderr, "Error: %s\n", message);
-    exit(EXIT_FAILURE);
-}
-
-// Recursive Descent Parsing Functions
-int parseExpression() {
-    int result = parseTerm(); // Parse a term first
-
-    // Handle addition and subtraction
-    while (currentToken.type == TOKEN_PLUS || currentToken.type == TOKEN_MINUS) {
-        TokenType operator = currentToken.type;
-        nextToken();
-        int rhs = parseTerm();
-        if (operator == TOKEN_PLUS) {
-            result += rhs;
+// Parser functions
+int parse_expression() {
+    int result = parse_term();
+    while (current_token.type == TOKEN_PLUS || current_token.type == TOKEN_MINUS) {
+        TokenType op = current_token.type;
+        next_token();
+        if (op == TOKEN_PLUS) {
+            result += parse_term();
         } else {
-            result -= rhs;
+            result -= parse_term();
         }
     }
-
     return result;
 }
 
-int parseTerm() {
-    int result = parseFactor(); // Parse a factor first
-
-    // Handle multiplication and division
-    while (currentToken.type == TOKEN_MULTIPLY || currentToken.type == TOKEN_DIVIDE) {
-        TokenType operator = currentToken.type;
-        nextToken();
-        int rhs = parseFactor();
-        if (operator == TOKEN_MULTIPLY) {
-            result *= rhs;
+int parse_term() {
+    int result = parse_factor();
+    while (current_token.type == TOKEN_TIMES || current_token.type == TOKEN_DIVIDE) {
+        TokenType op = current_token.type;
+        next_token();
+        if (op == TOKEN_TIMES) {
+            result *= parse_factor();
         } else {
-            if (rhs == 0) {
-                error("Division by zero");
-            }
-            result /= rhs;
+            int divisor = parse_factor();
+            if (divisor == 0) error("Division by zero");
+            result /= divisor;
         }
     }
-
     return result;
 }
 
-int parseFactor() {
-    if (currentToken.type == TOKEN_NUMBER) {
-        int value = currentToken.value;
-        nextToken();
-        return value;
-    } else if (currentToken.type == TOKEN_LPAREN) {
-        nextToken();
-        int result = parseExpression();
-        if (currentToken.type != TOKEN_RPAREN) {
-            error("Expected closing parenthesis");
+int parse_factor() {
+    int result;
+    if (current_token.type == TOKEN_NUMBER) {
+        result = current_token.value;
+        next_token();
+    } else if (current_token.type == TOKEN_LPAREN) {
+        next_token();
+        result = parse_expression();
+        if (current_token.type != TOKEN_RPAREN) {
+            error("Missing closing parenthesis");
         }
-        nextToken();
-        return result;
+        next_token();
     } else {
         error("Invalid factor");
-        return 0; // Unreachable
     }
+    return result;
 }
 
-// Main Function
+
+int evaluate_expression() {
+    next_token(); 
+    return parse_expression();
+}
+
+// Main function
 int main() {
-    char buffer[256];
+    char expression[MAX_EXPR_LEN];
 
     printf("Enter a mathematical expression: ");
-    if (!fgets(buffer, sizeof(buffer), stdin)) {
-        error("Failed to read input");
-    }
+    fgets(expression, sizeof(expression), stdin);
+    expression[strcspn(expression, "\n")] = 0; // Remove newline
 
-    // Remove trailing newline, if present
-    buffer[strcspn(buffer, "\n")] = '\0';
+    input = expression;
 
-    input = buffer;
-    nextToken();
+    int result = evaluate_expression();
+    printf("Valid expression. Result: %d\n", result);
 
-    int result = parseExpression();
-
-    if (currentToken.type != TOKEN_END) {
-        error("Unexpected characters at end of input");
-    }
-
-    printf("Result: %d\n", result);
     return 0;
 }
